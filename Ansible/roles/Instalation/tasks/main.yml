@@ -1,0 +1,15 @@
+---
+
+- name: cria chaves do root
+  user:
+    name: root
+    generate_ssh_key: yes
+
+- name: permite login por senha
+  lineinfile:
+    dest: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication yes'
+
+- name: tarefas específicas de distribuição
+  include_tasks: "{{ ansible_facts['distribution_file_variety'] }}.yml"

@@ -1,0 +1,7 @@
+/.vagrant/
+.vagrant/
+.vagrant
+/.vagrant
+/output-*/
+*.log
+*.ova

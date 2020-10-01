@@ -1,0 +1,67 @@
+---
+
+- assert:
+    that: ansible_facts['distribution_major_version']|int >= 6
+    fail_msg: "apenas para RHEL/CentOS >= 6"
+    quiet: true
+
+- name: lista de pacotes
+  package_facts:
+
+# necessário para os pacotes a seguir
+- name: instala EPEL
+  yum:
+    name: epel-release
+    state: present
+  when:
+    - ansible_distribution == 'CentOS'
+    - "'avahi' not in ansible_facts.packages or 'nss-mdns' not in ansible_facts.packages"
+  register: epel
+
+- name: instala avahi
+  yum:
+    name: avahi
+    state: present
+  when:
+    - ansible_distribution == 'Red Hat Enterprise Linux' or epel.changed
+    - "'avahi' not in ansible_facts.packages"
+
+- name: instala nss-mdns
+  yum:
+    name: nss-mdns
+    state: present
+  when:
+    - ansible_distribution == 'Red Hat Enterprise Linux' or epel.changed
+    - "'nss-mdns' not in ansible_facts.packages"
+
+- name: inicia avahi-daemon
+  service:
+    name: avahi-daemon
+    state: started
+    # o serviço já vem habilitado
+
+# desinstala apenas se foi instalado nesta execução; não se já estava instalado
+- name: desinstala EPEL
+  yum:
+    name: epel-release
+    state: absent
+  when: epel.changed
+
+# desabilitar para dificuldade baixa e normal; habilitar para dificuldade alta
+- name: selinux
+  selinux:
+    state: "{{ (dificuldade|default('normal') != 'alta') | ternary('disabled', 'enforcing') }}"
+
+- name: configurações gerais de shell interativo
+  blockinfile:
+    path: /etc/profile.d/sh.local
+    block: |
+      PAGER=less
+      PS1='[\u@\h \w]\$ '
+
+- name: atualiza todos os pacotes
+  yum:
+    name: '*'
+    state: latest
+  tags:
+    - upgrade
