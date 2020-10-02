@@ -68,7 +68,6 @@ Vagrant.configure("2") do |config|
         libvirt.memory = maquina["memoria"] || 512
       end
 
-      config.vm.provision "shell", path: "shell.sh"
 
       config.vm.provision "ansible" do |ansible|
         ansible.compatibility_mode = "1.8"
