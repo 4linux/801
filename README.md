@@ -7,7 +7,13 @@ adaptado para outros propósitos.
 ## Requisitos
 
 * Vagrant
-* VirtualBox
+* VirtualBox (https://www.virtualbox.org/wiki/Downloads)
+
+## Requisitos Adicionais (Windows)
+
+* 7-Zip (https://www.7-zip.org/download.html)
+* Cmder (https://cmder.app/)
+* Notepad++ (https://notepad-plus-plus.org/downloads/)
 
 ## Como instanciar o laboratório
 
