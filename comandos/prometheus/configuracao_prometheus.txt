@@ -1,0 +1,74 @@
+> Como root... 
+
+```
+yum install docker 
+
+mkdir /etc/prometheus/
+
+vim /etc/prometheus/prometheus.yml
+
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+
+    # Override the global default and scrape targets from this job every 5 seconds.
+    scrape_interval: 2s
+
+    static_configs:
+      - targets: ['192.168.56.70:9090','192.168.56.70:9187']
+```
+
+### Executar os containers 
+
+```
+docker run -dti --name prometheus -v /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml -p 9090:9090 --restart always prom/prometheus
+
+docker run -dti --name grafana -p 3000:3000 --restart always grafana/grafana
+```
+
+> Senha do grafana: admin / admin 
+
+http://192.168.56.70:3000/
+http://192.168.56.70:9090/
+
+Pronto, com docker subimos rapidamente uma instância do prometheus (Monitoramento) e outra do grafana (Gráficos)
+Agora precisamos configurar um usuário para acessar as métricas do postgres. Neste caso, não é interessante que o mesmo seja superusuário.
+
+### Configurando um usuário para o exporter
+
+Vamos criar o usuário e aplicar o grupo pg_monitor:
+
+```
+psql -qc "create user pgexporter password 'secretpassword';"
+psql -qc "GRANT pg_monitor to pgexporter;"
+
+vim /var/lib/pgsql/15/data/pg_hba.conf
+host    all             all             192.168.56.0/24         scram-sha-256
+systemctl reload postgresql-15.service 
+```
+
+Agora como root, rodar o container do exporter. Note que não precisa ser na mesma máquina onde o servidor está instalado.
+
+```
+docker run -dti \
+  --net=host \
+  -e DATA_SOURCE_NAME="postgresql://pgexporter:secretpassword@192.168.56.70:5432/postgres?sslmode=disable" \
+  quay.io/prometheuscommunity/postgres-exporter
+```
+
+Teste o exporter...
+http://192.168.56.70:9187/metrics
+
+### Configurar o datasource do prometheus no Grafana
+
+Acesse: Configuration -> Datasources e configure o datasource do prometheus
+
+http://192.168.56.70:9090/
+
+### Importar o Dashboards 
+
+Dashboards -> Import
+
+https://grafana.com/grafana/dashboards/9628-postgresql-database/
+
+Obs.: Este exporter é somente para o banco. Para monitorar a instância (linux), é necessário instalar um node-exporter.
