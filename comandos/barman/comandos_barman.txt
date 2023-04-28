@@ -1,0 +1,145 @@
+
+```
+yum install -y barman barman-cli
+
+vim /etc/barman.d/4linux.conf
+[4linux]
+description =  "Backup da aula da 4linux"
+
+ssh_command = ssh postgres@localhost
+
+conninfo = host=localhost user=barman dbname=postgres password=123
+
+backup_method = rsync
+reuse_backup = link
+backup_options = concurrent_backup
+
+parallel_jobs = 1
+
+archiver = on
+
+path_prefix = "/usr/pgsql-15/bin"
+
+compression = gzip
+```
+
+#### Configurando o SSH
+
+Para que o SSH funcione, é necessário configurar o mesmo sem senha
+
+Como usuário barman:
+
+```
+su - barman
+ssh-keygen -t rsa 
+```
+
+Como usuário postgres: 
+
+```
+su - postgres
+ssh-keygen -t rsa 
+```
+
+Como usuário root:
+
+```
+cat /var/lib/barman/.ssh/id_rsa.pub > /var/lib/pgsql/.ssh/authorized_keys
+cat /var/lib/pgsql/.ssh/id_rsa.pub > /var/lib/barman/.ssh/authorized_keys
+```
+
+#### Testando o SSH: 
+
+```
+su - postgres
+ssh barman@localhost
+
+exit 
+exit 
+
+su - barman
+ssh postgres@localhost
+
+exit 
+exit 
+```
+
+#### Configurando o usuário
+
+```
+psql
+
+create user barman superuser replication password '123';
+
+vim /var/lib/pgsql/15/data/pg_hba.conf  # Já deve estar configurado, só confirma...
+host    all             all             127.0.0.1/32            scram-sha-256
+host    replication     all             127.0.0.1/32            scram-sha-256
+
+psql -qc "SELECT pg_reload_conf();" # Caso precise re-aplicar.
+```
+
+#### Configurando os parâmetros
+
+```
+psql 
+
+ALTER SYSTEM SET archive_mode = 'ON';
+ALTER SYSTEM SET archive_command = 'barman-wal-archive localhost 4linux %p';
+
+systemctl restart postgresql-15 # archive_mode só é possível com restart.
+```
+
+Testar o archive: 
+
+```
+barman-wal-archive localhost 4linux dummy -t
+```
+
+#### Gerando wals para teste
+
+O barman precisa de wals para fazer o PITR. Assim, vamos executar o comando para gerar um novo wal.
+
+```
+select pg_switch_wal(); -- Executar 5x
+checkpoint;
+```
+
+#### Testando o barman... 
+
+```
+su - barman
+
+barman check 4linux # Esperar o archive... Pode ser que demore na primeira vez
+```
+
+#### O primeiro backup
+
+```
+barman backup 4linux # O ideal é posteriormente colocar em algum tipo de cron.
+barman backup 4linux
+barman backup 4linux --reuse-backup=off
+
+cd /var/lib/barman/4linux/
+
+ls -lha
+
+drwxrwxr-x 2 barman barman 4.0K Apr  9 16:16 base -> Backup físico 
+drwxrwxr-x 2 barman barman 4.0K Apr  9 16:16 errors -> Diretório de erros
+drwxrwxr-x 2 barman barman 4.0K Apr  9 16:26 incoming -> Wals que estão chegando (Archive_command)
+drwxrwxr-x 2 barman barman 4.0K Apr  9 16:16 streaming -> Caso utilize o modo streamming (Replicação)
+drwxrwxr-x 3 barman barman 4.0K Apr  9 16:26 wals -> Diretório dos wals arquvidos pelo barman
+
+cd base
+
+du -sh * 
+```
+
+#### OK. E o restore?
+
+Para restaurar uma instância com o barman é muito simples, e você pode inclusive especificar a data do restore: 
+
+```
+# Obs... Lembre-se de escolher uma data válida, e não pode ser posterior.
+time barman recover --target-time "2023-04-16 22:06:00-03:00" --remote-ssh-command "ssh postgres@192.168.56.70" \
+4linux 20230416T220540 /var/lib/pgsql/15/restore
+```
